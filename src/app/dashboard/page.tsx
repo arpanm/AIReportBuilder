@@ -3,6 +3,8 @@ import { Plus, FolderOpen, Database, FileBarChart } from 'lucide-react';
 import styles from './dashboard.module.css';
 import { getProjects } from './projects/actions';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Dashboard() {
     const projects = await getProjects();
 
@@ -29,7 +31,7 @@ export default async function Dashboard() {
                 </div>
             ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                    {projects.map((project) => (
+                    {projects.map((project: any) => (
                         <Link href={`/dashboard/projects/${project.id}`} key={project.id} className={styles.projectCard} style={{
                             display: 'block',
                             background: 'var(--surface)',
