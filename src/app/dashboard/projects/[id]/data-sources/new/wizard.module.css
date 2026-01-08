@@ -1,0 +1,98 @@
+.wizardContainer {
+    max-width: 800px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+}
+
+.stepTitle {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+}
+
+.typeGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.typeCard {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    text-align: center;
+}
+
+.typeCard:hover {
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.1);
+}
+
+.selectedCard {
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.1);
+    box-shadow: 0 0 0 2px var(--primary);
+}
+
+.formGrid {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.fileUploadArea {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 3rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(15, 23, 42, 0.3);
+}
+
+.fileUploadArea:hover {
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.05);
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.label {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.input {
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    outline: none;
+}
+
+.input:focus {
+    border-color: var(--primary);
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+}

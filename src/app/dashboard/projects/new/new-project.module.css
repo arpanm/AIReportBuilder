@@ -1,0 +1,82 @@
+.formCard {
+    max-width: 600px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.label {
+    font-weight: 600;
+    color: var(--text-main);
+    font-size: 0.95rem;
+}
+
+.input,
+.textarea {
+    padding: 0.8rem 1rem;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-main);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input:focus,
+.textarea:focus {
+    border-color: var(--primary);
+}
+
+.textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.button,
+.cancelButton {
+    padding: 0.8rem 1.5rem;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.button {
+    background: var(--primary);
+    color: white;
+    border: none;
+}
+
+.button:hover {
+    background: var(--primary-hover);
+}
+
+.cancelButton {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+}
+
+.cancelButton:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.05);
+}

@@ -1,0 +1,77 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  password  String   // Hashed
+  role      String   // SUPER_ADMIN, USER
+  projects  ProjectUser[]
+  createdProject Project[] @relation("CreatedProjects")
+  reports   Report[]
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  ownerId     String
+  owner       User     @relation("CreatedProjects", fields: [ownerId], references: [id])
+  users       ProjectUser[]
+  dataSources DataSource[]
+  reports     Report[]
+}
+
+model ProjectUser {
+  id        String @id @default(uuid())
+  projectId String
+  userId    String
+  role      String // VIEW_ONLY, EDITOR, ADMIN
+  project   Project @relation(fields: [projectId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+}
+
+model DataSource {
+  id        String @id @default(uuid())
+  projectId String
+  type      String // BIGQUERY, MYSQL, POSTGRES, EXCEL
+  encryptedConfig String // Encrypted connection string or file path
+  schema    String // JSON string: { tables: [{ name, columns: [{ name, type }] }] }
+  name      String
+  project   Project @relation(fields: [projectId], references: [id])
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  prompt      String
+  query       String?
+  vizType     String   // TABLE, BAR, LINE, PIE
+  vizConfig   String?  // JSON for chart data/config
+  aiInsight   String?
+  createdAt   DateTime @default(now())
+  project     Project @relation(fields: [projectId], references: [id])
+  alerts      Alert[]
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id])
+  shareToken  String?  // Unique token for public/shared access
+}
+
+model Alert {
+  id        String   @id @default(uuid())
+  reportId  String
+  email     String
+  frequency String   // DAILY, HOURLY, WEEKLY
+  report    Report   @relation(fields: [reportId], references: [id])
+}
