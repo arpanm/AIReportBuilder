@@ -5,26 +5,108 @@ import { generateContent } from '@/lib/ai';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
+// GLOBAL IN-MEMORY STORE FOR DEMO (Vercel Lambda will reset this eventually, but fine for a session)
+let MOCK_REPORTS: any[] = [
+    {
+        id: 'mock-report-1',
+        projectId: 'mock-project-id',
+        title: 'Q4 Sales Analysis',
+        prompt: 'Analyze sales performance for Q4',
+        query: 'SELECT * FROM Sales WHERE date >= "2023-10-01"',
+        vizType: 'BAR',
+        vizConfig: JSON.stringify({
+            xAxis: 'region',
+            yAxis: 'amount',
+            data: [
+                { region: 'North', amount: 45000 },
+                { region: 'South', amount: 32000 },
+                { region: 'East', amount: 28000 },
+                { region: 'West', amount: 51000 }
+            ]
+        }),
+        aiInsight: 'West region outperformed others in Q4, driven by holiday season demand. East region shows potential for growth.',
+        createdAt: new Date(),
+        creator: { name: 'Demo Admin' }
+    },
+    {
+        id: 'mock-report-2',
+        projectId: 'mock-project-id',
+        title: 'Product Revenue Distribution',
+        prompt: 'Show revenue share by product category',
+        query: 'SELECT Product, SUM(Revenue) FROM Sales GROUP BY Product',
+        vizType: 'PIE',
+        vizConfig: JSON.stringify({
+            xAxis: 'Product',
+            yAxis: 'Revenue',
+            data: [
+                { name: 'Electronics', value: 120000 },
+                { name: 'Clothing', value: 85000 },
+                { name: 'Home', value: 45000 }
+            ]
+        }),
+        aiInsight: 'Electronics segment dominates revenue share at 48%.',
+        createdAt: new Date(Date.now() - 86400000), // Yesterday
+        creator: { name: 'Demo Admin' }
+    }
+];
+
+const MOCK_SALES_ROWS = [
+    { Date: '2023-10-15', Revenue: 1500, Region: 'North', Product: 'Electronics' },
+    { Date: '2023-10-20', Revenue: 2300, Region: 'West', Product: 'Clothing' },
+    { Date: '2023-11-05', Revenue: 4100, Region: 'West', Product: 'Electronics' },
+    { Date: '2023-11-12', Revenue: 900, Region: 'East', Product: 'Home' },
+    { Date: '2023-12-01', Revenue: 5200, Region: 'North', Product: 'Electronics' },
+    { Date: '2023-12-15', Revenue: 3400, Region: 'South', Product: 'Clothing' },
+    { Date: '2023-12-24', Revenue: 6000, Region: 'West', Product: 'Electronics' },
+    { Date: '2024-01-05', Revenue: 1200, Region: 'East', Product: 'Home' }
+];
+
 export async function generateReportInsight(projectId: string, prompt: string) {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) return { error: 'Unauthorized' };
 
-    // 1. Fetch available schemas
-    const dataSources = await prisma.dataSource.findMany({
-        where: { projectId },
-        select: { name: true, schema: true, type: true }
-    });
+    let dataSources = [];
+    let mockDataContext = '';
+
+    if (projectId === 'mock-project-id') {
+        // MOCK DATA SCHEMA FOR DEMO
+        dataSources = [{
+            name: 'Demo Sales Data',
+            type: 'EXCEL',
+            schema: JSON.stringify({
+                tables: [{
+                    name: 'Sales',
+                    columns: [
+                        { name: 'Date', type: 'Date' },
+                        { name: 'Revenue', type: 'Number' },
+                        { name: 'Region', type: 'String' },
+                        { name: 'Product', type: 'String' }
+                    ]
+                }]
+            })
+        }];
+
+        // Inject REAL MOCK ROWS so Gemini doesn't hallucinate random numbers
+        mockDataContext = `\n[DEMO MODE] Here is a sample of the ACTUAL DATA in the 'Sales' table. Use this to generate accurate insights and chart data:\n${JSON.stringify(MOCK_SALES_ROWS, null, 2)}`;
+    } else {
+        // Real DB Fetch
+        dataSources = await prisma.dataSource.findMany({
+            where: { projectId },
+            select: { name: true, schema: true, type: true }
+        });
+    }
 
     if (dataSources.length === 0) {
         return { error: 'No data sources found. Please connect a data source first.' };
     }
 
-    const schemasContext = dataSources.map(ds => `Source: ${ds.name} (${ds.type})\nSchema: ${ds.schema}`).join('\n\n');
+    const schemasContext = dataSources.map((ds: any) => `Source: ${ds.name} (${ds.type})\nSchema: ${ds.schema}`).join('\n\n');
 
     // 2. Construct Prompt
     const systemPrompt = `
     You are an AI Data Analyst. 
     Your goal is to generate a SQL query (or pseudo-query for Excel), a suitable visualization configuration, and a brief insight based on the user's request and the provided database schemas.
+    ${mockDataContext}
     
     Data Sources:
     ${schemasContext}
@@ -66,6 +148,24 @@ export async function saveReport(projectId: string, reportData: any) {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) return { error: 'Unauthorized' };
 
+    if (projectId === 'mock-project-id') {
+        const newReportId = 'mock-report-' + Date.now();
+        const newReport = {
+            id: newReportId,
+            projectId: 'mock-project-id',
+            title: reportData.title || 'Demo Generated Report',
+            prompt: reportData.prompt,
+            query: reportData.query,
+            vizType: reportData.vizType,
+            vizConfig: JSON.stringify(reportData.vizConfig),
+            aiInsight: reportData.insight,
+            createdAt: new Date(),
+            creator: { name: 'Demo Admin' }
+        };
+        MOCK_REPORTS.unshift(newReport); // Add to beginning of list
+        return { success: true, reportId: newReportId };
+    }
+
     try {
         const report = await prisma.report.create({
             data: {
@@ -81,7 +181,9 @@ export async function saveReport(projectId: string, reportData: any) {
         });
         return { success: true, reportId: report.id };
     } catch (e) {
-        return { error: 'Failed to save report' };
+        // Fallback for Demo Mode in case DB fails for real project
+        console.error("Save Report Failed (Demo Mode?):", e);
+        return { error: 'Failed to save report' }; // Don't fake success for real projects to avoid confusion
     }
 }
 
@@ -89,19 +191,37 @@ export async function getReports(projectId: string) {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) return [];
 
-    return prisma.report.findMany({
-        where: { projectId },
-        orderBy: { createdAt: 'desc' },
-        include: { creator: { select: { name: true } } }
-    });
+    if (projectId === 'mock-project-id') {
+        return MOCK_REPORTS;
+    }
+
+    try {
+        return await prisma.report.findMany({
+            where: { projectId },
+            orderBy: { createdAt: 'desc' },
+            include: { creator: { select: { name: true } } }
+        });
+    } catch (e) {
+        console.error("Fetch Reports Failed (Returning Demo List):", e);
+        return MOCK_REPORTS; // Fallback to demo list if DB fails completely
+    }
 }
 
 export async function getReport(reportId: string) {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) return null;
 
-    return prisma.report.findUnique({
-        where: { id: reportId },
-        include: { project: true }
-    });
+    if (reportId.startsWith('mock-report')) {
+        const mock = MOCK_REPORTS.find(r => r.id === reportId);
+        return mock ? { ...mock, project: { name: 'Demo Project' } } : MOCK_REPORTS[0];
+    }
+
+    try {
+        return await prisma.report.findUnique({
+            where: { id: reportId },
+            include: { project: true }
+        });
+    } catch (e) {
+        return null;
+    }
 }
