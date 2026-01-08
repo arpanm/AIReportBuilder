@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Plus, FileBarChart, Calendar, User } from 'lucide-react';
 import { getReports } from './actions';
+import DeleteReportButton from './DeleteReportButton';
 
 export default async function ReportsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -36,14 +37,19 @@ export default async function ReportsPage({ params }: { params: Promise<{ id: st
                 </div>
             ) : (
                 <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-                    {reports.map(report => (
+                    {reports.map((report: any) => (
                         <Link href={`/dashboard/projects/${id}/reports/${report.id}`} key={report.id} style={{ textDecoration: 'none', color: 'inherit' }}>
-                            <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border)', transition: 'border-color 0.2s', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
-                                <div style={{ fontSize: '1.1rem', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{report.title}</div>
+                            <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border)', transition: 'border-color 0.2s', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%', position: 'relative' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{report.title}</div>
+                                    <div style={{ flexShrink: 0 }}>
+                                        <DeleteReportButton reportId={report.id} />
+                                    </div>
+                                </div>
                                 <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>“{report.prompt.substring(0, 60)}...”</div>
 
                                 <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }} suppressHydrationWarning>
                                         <Calendar size={14} />
                                         {new Date(report.createdAt).toLocaleDateString()}
                                     </div>

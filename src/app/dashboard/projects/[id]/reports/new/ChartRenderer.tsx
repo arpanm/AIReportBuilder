@@ -19,7 +19,7 @@ export default function ChartRenderer({ type, config }: { type: string, config: 
     }
 
     const RenderChart = () => {
-        switch (type) {
+        switch (type?.toUpperCase()) {
             case 'BAR':
                 return (
                     <ResponsiveContainer width="100%" height="100%">

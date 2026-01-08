@@ -78,3 +78,37 @@ export async function getDataSources(projectId: string) {
         return [];
     }
 }
+
+import { getReports } from './reports/actions';
+
+export async function getProjectStats(projectId: string) {
+    if (projectId === 'mock-project-id') {
+        const reports = await getReports(projectId);
+        const dataSources = await getDataSources(projectId);
+        return {
+            reportCount: reports.length,
+            dataSourceCount: dataSources.length
+        };
+    }
+
+    try {
+        const stats = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: {
+                _count: {
+                    select: {
+                        reports: true,
+                        dataSources: true
+                    }
+                }
+            }
+        });
+        return {
+            reportCount: stats?._count.reports || 0,
+            dataSourceCount: stats?._count.dataSources || 0
+        };
+    } catch (e) {
+        console.error("DB Error in getProjectStats", e);
+        return { reportCount: 0, dataSourceCount: 0 };
+    }
+}

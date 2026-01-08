@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { generateContent } from '@/lib/ai';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { revalidatePath } from 'next/cache';
 
 // GLOBAL IN-MEMORY STORE FOR DEMO (Vercel Lambda will reset this eventually, but fine for a session)
 let MOCK_REPORTS: any[] = [
@@ -223,5 +224,137 @@ export async function getReport(reportId: string) {
         });
     } catch (e) {
         return null;
+    }
+}
+
+export async function updateReport(reportId: string, updates: any) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    // MOCK UPDATE
+    if (reportId.startsWith('mock-report')) {
+        const index = MOCK_REPORTS.findIndex(r => r.id === reportId);
+        if (index !== -1) {
+            MOCK_REPORTS[index] = { ...MOCK_REPORTS[index], ...updates };
+            return { success: true };
+        }
+        return { error: 'Mock report not found' };
+    }
+
+    try {
+        await prisma.report.update({
+            where: { id: reportId },
+            data: {
+                title: updates.title,
+                query: updates.query,
+                vizType: updates.vizType,
+                vizConfig: updates.vizConfig ? JSON.stringify(updates.vizConfig) : undefined,
+                aiInsight: updates.aiInsight
+            }
+        });
+        revalidatePath(`/dashboard/projects/[id]/reports/${reportId}`);
+        return { success: true };
+    } catch (e) {
+        console.error("Update Report Failed:", e);
+        return { error: 'Failed to update report' };
+    }
+}
+
+export async function deleteReport(reportId: string) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    if (reportId.startsWith('mock-report')) {
+        MOCK_REPORTS = MOCK_REPORTS.filter(r => r.id !== reportId);
+        return { success: true };
+    }
+
+    try {
+        // Fix Foreign Key Constraint (P2003): Delete related alerts first
+        await prisma.alert.deleteMany({
+            where: { reportId }
+        });
+
+        await prisma.report.delete({
+            where: { id: reportId }
+        });
+        return { success: true };
+    } catch (e) {
+        console.error("Delete Report Failed:", e); // Added Logging
+        return { error: 'Failed to delete report' };
+    }
+}
+
+export async function regenerateReportFromQuery(projectId: string, query: string) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    let dataSources = [];
+    let mockDataContext = '';
+
+    if (projectId === 'mock-project-id') {
+        dataSources = [{
+            name: 'Demo Sales Data',
+            type: 'EXCEL',
+            schema: JSON.stringify({
+                tables: [{
+                    name: 'Sales',
+                    columns: [
+                        { name: 'Date', type: 'Date' },
+                        { name: 'Revenue', type: 'Number' },
+                        { name: 'Region', type: 'String' },
+                        { name: 'Product', type: 'String' }
+                    ]
+                }]
+            })
+        }];
+        mockDataContext = `\n[DEMO MODE] Here is a sample of the ACTUAL DATA in the 'Sales' table. Use this to generate accurate insights and chart data:\n${JSON.stringify(MOCK_SALES_ROWS, null, 2)}`;
+    } else {
+        dataSources = await prisma.dataSource.findMany({
+            where: { projectId },
+            select: { name: true, schema: true, type: true }
+        });
+    }
+
+    if (dataSources.length === 0) return { error: 'No data sources found.' };
+
+    const schemasContext = dataSources.map((ds: any) => `Source: ${ds.name} (${ds.type})\nSchema: ${ds.schema}`).join('\n\n');
+
+    const systemPrompt = `
+    You are an AI Data Analyst.
+    The user has MANUALLY provided a specific SQL query (or pseudo-query).
+    Your goal is to EXECUTE this query conceptually and generate the corresponding visualization configuration and insight.
+
+    Data Sources:
+    ${schemasContext}
+    ${mockDataContext}
+
+    User's Custom Query: "${query}"
+
+    Response Format (JSON only, no markdown):
+    {
+        "query": "${query}",
+        "vizType": "BAR" | "LINE" | "PIE" | "TABLE", 
+        "vizConfig": {
+            "xAxis": "column_name",
+            "yAxis": "column_name",
+            "series": "column_name (optional)",
+            "data": [
+                 // Generate rows based on the logic of the User's Custom Query.
+                 {"column_name": value, ...}
+            ]
+        },
+        "insight": "A brief 1-2 sentence insight based on the result of this specific query."
+    }
+    `;
+
+    try {
+        const responseText = await generateContent(systemPrompt);
+        const cleanedResponse = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(cleanedResponse);
+        return { success: true, data: result };
+    } catch (e) {
+        console.error("AI Regeneration Error:", e);
+        return { error: 'Failed to regenerate report.' };
     }
 }
