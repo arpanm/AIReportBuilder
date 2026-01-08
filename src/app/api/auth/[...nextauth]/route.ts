@@ -25,13 +25,15 @@ export const authOptions: NextAuthOptions = {
                 });
 
                 if (!user) {
-                    return null;
+                    console.log("Login failed: User not found:", credentials.email);
+                    throw new Error("UserNotFound");
                 }
 
                 const passwordsMatch = await bcrypt.compare(credentials.password, user.password);
 
                 if (!passwordsMatch) {
-                    return null;
+                    console.log("Login failed: Password mismatch for:", credentials.email);
+                    throw new Error("PasswordMismatch");
                 }
 
                 return {
