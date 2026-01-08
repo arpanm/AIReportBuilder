@@ -1,11 +1,9 @@
 {
-    "cron": {
-        "sections": [
-            {
-                "path": "/api/cron/alerts",
-                "schedule": "0 * * * *"
-            }
-        ]
-    },
+    "crons": [
+        {
+            "path": "/api/cron/alerts",
+            "schedule": "0 * * * *"
+        }
+    ],
     "buildCommand": "npx prisma generate && next build"
 }
