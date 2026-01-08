@@ -19,12 +19,15 @@ model User {
   projects  ProjectUser[]
   createdProject Project[] @relation("CreatedProjects")
   reports   Report[]
+  sharedReports ReportUser[]
 }
 
 model Project {
   id          String   @id @default(uuid())
   name        String
   description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
   ownerId     String
   owner       User     @relation("CreatedProjects", fields: [ownerId], references: [id])
   users       ProjectUser[]
@@ -47,6 +50,7 @@ model DataSource {
   type      String // BIGQUERY, MYSQL, POSTGRES, EXCEL
   encryptedConfig String // Encrypted connection string or file path
   schema    String // JSON string: { tables: [{ name, columns: [{ name, type }] }] }
+  sampleQueries String? // JSON string: [{ prompt, query }]
   name      String
   project   Project @relation(fields: [projectId], references: [id])
 }
@@ -63,9 +67,19 @@ model Report {
   createdAt   DateTime @default(now())
   project     Project @relation(fields: [projectId], references: [id])
   alerts      Alert[]
+  users       ReportUser[]
   creatorId   String
   creator     User     @relation(fields: [creatorId], references: [id])
   shareToken  String?  // Unique token for public/shared access
+}
+
+model ReportUser {
+  id        String @id @default(uuid())
+  reportId  String
+  userId    String
+  role      String // VIEW_ONLY, EDITOR
+  report    Report @relation(fields: [reportId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
 }
 
 model Alert {

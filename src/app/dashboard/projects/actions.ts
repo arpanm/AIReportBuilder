@@ -42,45 +42,108 @@ export async function createProject(formData: FormData) {
     }
 }
 
+const MOCK_PROJECT = {
+    id: 'mock-project-id',
+    name: 'Demo Project (Read Only)',
+    description: 'This is a demo project generated because the database is invalid or read-only.',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ownerId: 'mock-admin-id',
+    _count: {
+        reports: 0,
+        dataSources: 0
+    }
+};
+
 export async function getProjects() {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
         return [];
     }
+    const userId = (session.user as any).id;
 
-    // Fetch projects where the user is a member
     try {
-        const projects = await prisma.project.findMany({
+        // 1. Get projects where user is owner or member
+        const directProjects = await prisma.project.findMany({
             where: {
-                users: {
-                    some: {
-                        userId: (session.user as any).id
-                    }
-                }
+                OR: [
+                    { ownerId: userId },
+                    { users: { some: { userId } } }
+                ]
             },
             include: {
-                _count: {
-                    select: { reports: true, dataSources: true }
-                }
+                owner: { select: { name: true, email: true } },
+                users: { include: { user: { select: { name: true, email: true } } } },
+                _count: { select: { reports: true, dataSources: true } }
             },
             orderBy: { name: 'asc' }
         });
 
-        return projects;
+        // 2. Get project IDs where reports are shared with the user
+        const sharedReportEntries = await prisma.reportUser.findMany({
+            where: { userId },
+            select: { report: { select: { projectId: true } } }
+        });
+        const sharedProjectIds = Array.from(new Set(sharedReportEntries.map((e: any) => e.report.projectId)));
+
+        // 3. Get those projects if they aren't already in directProjects
+        const existingIds = new Set(directProjects.map((p: any) => p.id));
+        const missingIds = sharedProjectIds.filter(id => !existingIds.has(id));
+
+        if (missingIds.length > 0) {
+            const extraProjects = await prisma.project.findMany({
+                where: { id: { in: missingIds } },
+                include: {
+                    owner: { select: { name: true, email: true } },
+                    users: { include: { user: { select: { name: true, email: true } } } },
+                    _count: { select: { reports: true, dataSources: true } }
+                }
+            });
+            return [...directProjects, ...extraProjects].sort((a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+        }
+
+        return directProjects;
     } catch (e) {
         console.error("DB Error in getProjects, returning mock data:", e);
-        // MOCK DATA FOR DEMO
-        return [{
-            id: 'mock-project-id',
-            name: 'Demo Project (Read Only)',
-            description: 'This is a demo project generated because the database is invalid or read-only.',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            ownerId: 'mock-admin-id',
-            _count: {
-                reports: 0,
-                dataSources: 0
-            }
-        }];
+        return [MOCK_PROJECT];
+    }
+}
+
+export async function shareProject(projectId: string, email: string, role: string) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    if (projectId === 'mock-project-id') return { success: true };
+
+    try {
+        const userToShare = await prisma.user.findUnique({ where: { email } });
+        if (!userToShare) return { error: 'User not found' };
+
+        // Check if already shared
+        const existing = await prisma.projectUser.findFirst({
+            where: { projectId, userId: userToShare.id }
+        });
+
+        if (existing) {
+            await prisma.projectUser.update({
+                where: { id: existing.id },
+                data: { role }
+            });
+        } else {
+            await prisma.projectUser.create({
+                data: {
+                    projectId,
+                    userId: userToShare.id,
+                    role
+                }
+            });
+        }
+        revalidatePath('/dashboard/projects');
+        return { success: true };
+    } catch (e) {
+        console.error("Share Project Failed:", e);
+        return { error: 'Failed to share project' };
     }
 }

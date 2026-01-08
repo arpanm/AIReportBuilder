@@ -1,15 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Send, Save, Loader2, Sparkles, BarChart2 } from 'lucide-react';
 import styles from './report-builder.module.css';
 import { generateReportInsight, saveReport } from '../actions';
 import ChartRenderer from './ChartRenderer';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function ReportBuilderClient({ projectId }: { projectId: string }) {
+function ReportBuilderInternal({ projectId }: { projectId: string }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [prompt, setPrompt] = useState('');
+
+    useEffect(() => {
+        const p = searchParams.get('prompt');
+        if (p) setPrompt(p);
+    }, [searchParams]);
+
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -172,5 +179,13 @@ export default function ReportBuilderClient({ projectId }: { projectId: string }
                 )}
             </div>
         </div>
+    );
+}
+
+export default function ReportBuilderClient(props: { projectId: string }) {
+    return (
+        <Suspense fallback={<div>Loading builder...</div>}>
+            <ReportBuilderInternal {...props} />
+        </Suspense>
     );
 }

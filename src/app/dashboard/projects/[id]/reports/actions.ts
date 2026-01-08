@@ -197,14 +197,39 @@ export async function getReports(projectId: string) {
     }
 
     try {
-        return await prisma.report.findMany({
-            where: { projectId },
-            orderBy: { createdAt: 'desc' },
-            include: { creator: { select: { name: true } } }
+        const userId = (session.user as any).id;
+
+        // 1. Check Project Membership
+        const projectMember = await prisma.projectUser.findFirst({
+            where: { projectId, userId }
         });
+        const projectOwner = await prisma.project.findFirst({
+            where: { id: projectId, ownerId: userId }
+        });
+
+        const hasFullAccess = !!projectMember || !!projectOwner;
+
+        if (hasFullAccess) {
+            return await prisma.report.findMany({
+                where: { projectId },
+                orderBy: { createdAt: 'desc' },
+                include: { creator: { select: { name: true } } }
+            });
+        } else {
+            // 2. Guest Access (Shared Reports Only)
+            return await prisma.report.findMany({
+                where: {
+                    projectId,
+                    users: { some: { userId } }
+                },
+                orderBy: { createdAt: 'desc' },
+                include: { creator: { select: { name: true } } }
+            });
+        }
+
     } catch (e) {
         console.error("Fetch Reports Failed (Returning Demo List):", e);
-        return MOCK_REPORTS; // Fallback to demo list if DB fails completely
+        return MOCK_REPORTS;
     }
 }
 
@@ -218,10 +243,30 @@ export async function getReport(reportId: string) {
     }
 
     try {
-        return await prisma.report.findUnique({
+        const userId = (session.user as any).id;
+        const report = await prisma.report.findUnique({
             where: { id: reportId },
-            include: { project: true }
+            include: { project: true, users: true }
         });
+
+        if (!report) return null;
+
+        // Access Check: Owner, Project Member, or Direct Share
+        const isCreator = report.creatorId === userId;
+        const isProjectOwner = report.project.ownerId === userId;
+        const isShared = report.users.some((u: any) => u.userId === userId);
+
+        // We'd ideally check project membership too, but for single report view, isShared is enough (or public)
+        if (isCreator || isProjectOwner || isShared) return report;
+
+        // Fail-safe check for project membership if not directly shared
+        const isProjectMember = await prisma.projectUser.findFirst({
+            where: { projectId: report.projectId, userId }
+        });
+
+        if (isProjectMember) return report;
+
+        return null;
     } catch (e) {
         return null;
     }
@@ -340,8 +385,8 @@ export async function regenerateReportFromQuery(projectId: string, query: string
             "yAxis": "column_name",
             "series": "column_name (optional)",
             "data": [
-                 // Generate rows based on the logic of the User's Custom Query.
-                 {"column_name": value, ...}
+                  // Generate rows based on the logic of the User's Custom Query.
+                  {"column_name": value, ...}
             ]
         },
         "insight": "A brief 1-2 sentence insight based on the result of this specific query."
@@ -356,5 +401,41 @@ export async function regenerateReportFromQuery(projectId: string, query: string
     } catch (e) {
         console.error("AI Regeneration Error:", e);
         return { error: 'Failed to regenerate report.' };
+    }
+}
+
+export async function shareReport(reportId: string, email: string, role: string) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    if (reportId.startsWith('mock-report')) return { success: true };
+
+    try {
+        const userToShare = await prisma.user.findUnique({ where: { email } });
+        if (!userToShare) return { error: 'User not found' };
+
+        // Check if already shared
+        const existing = await prisma.reportUser.findFirst({
+            where: { reportId, userId: userToShare.id }
+        });
+
+        if (existing) {
+            await prisma.reportUser.update({
+                where: { id: existing.id },
+                data: { role }
+            });
+        } else {
+            await prisma.reportUser.create({
+                data: {
+                    reportId,
+                    userId: userToShare.id,
+                    role
+                }
+            });
+        }
+        return { success: true };
+    } catch (e) {
+        console.error("Share Report Failed:", e);
+        return { error: 'Failed to share report' };
     }
 }

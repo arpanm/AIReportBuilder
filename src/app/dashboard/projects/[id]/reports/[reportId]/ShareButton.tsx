@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Share2, Mail, Link as LinkIcon, Check, Loader2 } from 'lucide-react';
-import { generateShareToken } from '../alerts-actions'; // path might need adjustment based on file location
+import { Share2, Mail, Link as LinkIcon, Check, Loader2, UserPlus } from 'lucide-react';
+import { generateShareToken } from '../alerts-actions';
+import ShareResourceModal from '../../../../components/ShareResourceModal';
+import { shareReport } from '../actions';
 
 export default function ShareButton({ reportId }: { reportId: string }) {
     const [isOpen, setIsOpen] = useState(false);
+    const [isSharingModalOpen, setIsSharingModalOpen] = useState(false);
     const [copied, setCopied] = useState(false);
     const [loading, setLoading] = useState(false);
     const [publicLink, setPublicLink] = useState('');
@@ -76,6 +79,25 @@ export default function ShareButton({ reportId }: { reportId: string }) {
                     gap: '0.25rem'
                 }}>
                     <button
+                        onClick={() => { setIsOpen(false); setIsSharingModalOpen(true); }}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem',
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-main)',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            borderRadius: '6px'
+                        }}
+                    >
+                        <UserPlus size={16} />
+                        Invite Collaborator
+                    </button>
+
+                    <button
                         onClick={handleCreateLink}
                         disabled={loading}
                         style={{
@@ -116,6 +138,13 @@ export default function ShareButton({ reportId }: { reportId: string }) {
                     </button>
                 </div>
             )}
+
+            <ShareResourceModal
+                resourceName="Report"
+                isOpen={isSharingModalOpen}
+                onClose={() => setIsSharingModalOpen(false)}
+                onShare={async (email, role) => await shareReport(reportId, email, role)}
+            />
         </div>
     );
 }

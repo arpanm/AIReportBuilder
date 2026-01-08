@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { revalidatePath } from 'next/cache';
 import { encrypt } from '@/lib/encryption';
+import { generateContent } from '@/lib/ai';
 
 export async function createDataSource(projectId: string, formData: FormData) {
     const session = await getServerSession(authOptions);
@@ -132,5 +133,79 @@ export async function getDataSource(dataSourceId: string) {
     } catch (e) {
         console.error("DB Error in getDataSource:", e);
         return null;
+    }
+}
+
+
+export async function updateDataSource(dataSourceId: string, updates: { name?: string, schema?: string }) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    if (dataSourceId === 'mock-source-1') {
+        return { success: true };
+    }
+
+    try {
+        await prisma.dataSource.update({
+            where: { id: dataSourceId },
+            data: updates
+        });
+        revalidatePath(`/dashboard/projects/[id]/data-sources/${dataSourceId}`);
+        return { success: true };
+    } catch (e) {
+        console.error("Update DataSource Failed:", e);
+        return { error: 'Failed to update data source' };
+    }
+}
+
+export async function generateDataSourceQueries(dataSourceId: string) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) return { error: 'Unauthorized' };
+
+    let schemaStr = '';
+
+    if (dataSourceId === 'mock-source-1') {
+        schemaStr = JSON.stringify({
+            tables: [{
+                name: 'Sales',
+                columns: [
+                    { name: 'date', type: 'Date' },
+                    { name: 'amount', type: 'Number' },
+                    { name: 'region', type: 'String' }
+                ]
+            }]
+        });
+    } else {
+        const ds = await prisma.dataSource.findUnique({ where: { id: dataSourceId } });
+        if (!ds) return { error: 'Not found' };
+        schemaStr = ds.schema;
+    }
+
+    const systemPrompt = `
+    You are an AI Data Analyst.
+    Given the following database schema, generate 5 interesting and distinct analytical questions (prompts) that a user might ask.
+    Schema: ${schemaStr}
+
+    Response Format (JSON Array of Strings only):
+    ["Question 1...", "Question 2...", ...]
+    `;
+
+    try {
+        const responseText = await generateContent(systemPrompt);
+        const cleanedResponse = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const queries = JSON.parse(cleanedResponse);
+
+        if (dataSourceId !== 'mock-source-1') {
+            await prisma.dataSource.update({
+                where: { id: dataSourceId },
+                data: { sampleQueries: JSON.stringify(queries) }
+            });
+            revalidatePath(`/dashboard/projects/[id]/data-sources/${dataSourceId}`);
+        }
+
+        return { success: true, data: queries };
+    } catch (e) {
+        console.error("Generate Queries Failed:", e);
+        return { error: 'Failed to generate queries' };
     }
 }
